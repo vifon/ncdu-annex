@@ -14,6 +14,11 @@ It is probably not production-ready and the calculations will
 definitely be inaccurate in presence of any other symlinks apart from
 the Git Annex ones.
 
+What could be improved:
+- Handling the "git annex drop" errors.
+- Handling of the non-annex symlink.
+- Probably some more integration.
+
 Recommended configure flags: --program-suffix=-annex
 
 
