@@ -242,13 +242,19 @@ void delete_process() {
       waitpid(child_pid, &status, 0);
       exitcode = WEXITSTATUS(status);
   } else {
-      (void)freopen("/dev/null", "w", stdout);
-      (void)freopen("/dev/null", "w", stderr);
+      if (!freopen("/dev/null", "r", stdin)
+          || !freopen("/dev/null", "w", stdout)
+          || !freopen("/dev/null", "w", stderr)) {
+
+          fprintf(stderr, "delete_process: freopen() failed\n");
+      }
+
       execlp(
           "git",
           "git", "annex", "drop", root->name,
           (char*)NULL
       );
+
       /* You don't have git-annex installed, you're on your own. */
       exit(1);
   }
