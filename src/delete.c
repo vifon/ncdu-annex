@@ -29,6 +29,8 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <sys/wait.h>
 
 
 #define DS_CONFIRM  0
@@ -44,7 +46,7 @@ static int lasterrno;
 static void delete_draw_confirm() {
   nccreate(6, 60, "Confirm delete");
 
-  ncprint(1, 2, "Are you sure you want to delete \"%s\"%c",
+  ncprint(1, 2, "Are you sure you want to drop \"%s\"%c",
     cropstr(root->name, 21), root->flags & FF_DIR ? ' ' : '?');
   if(root->flags & FF_DIR && root->sub != NULL)
     ncprint(2, 18, "and all of its contents?");
@@ -232,12 +234,26 @@ void delete_process() {
   seloption = 0;
   state = DS_PROGRESS;
   par = root->parent;
-  delete_dir(root);
-  if(nextsel)
-    nextsel->flags |= FF_BSEL;
+
+  pid_t child_pid;
+  int exitcode;
+  if ((child_pid = fork()) != 0) {
+      int status;
+      waitpid(child_pid, &status, 0);
+      exitcode = WEXITSTATUS(status);
+  } else {
+      (void)freopen("/dev/null", "w", stdout);
+      (void)freopen("/dev/null", "w", stderr);
+      execlp(
+          "git",
+          "git", "annex", "drop", root->name,
+          (char*)NULL
+      );
+      /* You don't have git-annex installed, you're on your own. */
+      exit(1);
+  }
+
   browse_init(par);
-  if(nextsel)
-    dirlist_top(-4);
 }
 
 

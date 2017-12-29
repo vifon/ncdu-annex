@@ -186,6 +186,8 @@ static void argv_parse(int argc, char **argv) {
     }
   }
 
+  exclude_add(".git/annex");
+
   if(export) {
     if(dir_export_init(export)) {
       fprintf(stderr, "Can't open %s: %s\n", export, strerror(errno));

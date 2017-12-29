@@ -188,7 +188,7 @@ static int dir_scan_item(struct dir *d) {
   if(exclude_match(dir_curpath))
     d->flags |= FF_EXL;
 
-  if(!(d->flags & (FF_ERR|FF_EXL)) && lstat(d->name, &st)) {
+  if(!(d->flags & (FF_ERR|FF_EXL)) && stat(d->name, &st)) {
     d->flags |= FF_ERR;
     dir_setlasterr(dir_curpath);
   }

@@ -1,3 +1,22 @@
+FORK COMMENTS
+=============
+
+ncdu-annex is a quick hack created to easily examine the size of the
+Git Annex repositories.
+
+Changes include:
+- Automatically ignore (--exclude) the ".git/annex" directory with the actual files, as we are only interested in the symlinks to them.
+- Uses stat(2) instead of lstat(2) to follow symlinks when calculating the file/directory size.
+- Use "git annex drop" to "delete" the files (the "d" key).
+- UI changes to reflect some of the changes.
+
+It is probably not production-ready and the calculations will
+definitely be inaccurate in presence of any other symlinks apart from
+the Git Annex ones.
+
+Recommended configure flags: --program-suffix=-annex
+
+
 ncdu 1.12g
 ==========
 
