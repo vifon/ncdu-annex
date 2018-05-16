@@ -54,6 +54,19 @@ directory with many files. 10.000 files will get you an export in the order of
 gzip. This scales linearly, so be prepared to handle a few tens of megabytes
 when dealing with millions of files.
 
+=item -e
+
+Enable extended information mode. This will, in addition to the usual file
+information, also read the ownership, permissions and last modification time
+for each file. This will result in higher memory usage (by roughly ~30%) and in
+a larger output file when exporting.
+
+When using the file export/import function, this flag will need to be added
+both when exporting (to make sure the information is added to the export), and
+when importing (to read this extra information in memory). This flag has no
+effect when importing a file that has been exported without the extended
+information.
+
 =back
 
 =head2 Interface options
@@ -117,6 +130,12 @@ prefixes, that is, powers of 1024 (KiB, MiB, etc).
 
 Requires a confirmation before quitting ncdu. Very helpful when you
 accidentally press 'q' during or after a very long scan.
+
+=item --color I<SCHEME>
+
+Select a color scheme. Currently only two schemes are recognized: I<off> to
+disable colors (the default) and I<dark> for a color scheme intended for dark
+backgrounds.
 
 =back
 
@@ -241,6 +260,45 @@ run ncdu as follows:
 =item q
 
 Quit
+
+=back
+
+
+=head1 FILE FLAGS
+
+Entries in the browser interface may be prefixed by a one-character flag. These
+flags have the following meaning:
+
+=over
+
+=item !
+
+An error occurred while reading this directory.
+
+=item .
+
+An error occurred while reading a subdirectory, so the indicated size may not be
+correct.
+
+=item <
+
+File or directory is excluded from the statistics by using exlude patterns.
+
+=item >
+
+Directory is on another filesystem.
+
+=item @
+
+This is neither a file nor a folder (symlink, socket, ...).
+
+=item H
+
+Same file was already counted (hard link).
+
+=item e
+
+Empty directory.
 
 =back
 

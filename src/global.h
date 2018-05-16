@@ -1,6 +1,6 @@
 /* ncdu - NCurses Disk Usage
 
-  Copyright (c) 2007-2016 Yoran Heling
+  Copyright (c) 2007-2018 Yoran Heling
 
   Permission is hereby granted, free of charge, to any person obtaining
   a copy of this software and associated documentation files (the
@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <limits.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -44,11 +45,12 @@
 #define FF_DIR    0x01
 #define FF_FILE   0x02
 #define FF_ERR    0x04 /* error while reading this item */
-#define FF_OTHFS  0x08 /* excluded because it was an other filesystem */
+#define FF_OTHFS  0x08 /* excluded because it was another filesystem */
 #define FF_EXL    0x10 /* excluded using exlude patterns */
 #define FF_SERR   0x20 /* error in subdirectory */
 #define FF_HLNKC  0x40 /* hard link candidate (file with st_nlink > 1) */
 #define FF_BSEL   0x80 /* selected */
+#define FF_EXT   0x100 /* extended struct available */
 
 /* Program states */
 #define ST_CALC   0
@@ -65,11 +67,9 @@ struct dir {
   uint64_t ino, dev;
   struct dir *parent, *next, *prev, *sub, *hlnk;
   int items;
-  unsigned char flags;
+  unsigned short flags;
   char name[];
 };
-/* sizeof(total dir) = SDIRSIZE + strlen(name) = offsetof(struct dir, name) + strlen(name) + 1 */
-#define SDIRSIZE (offsetof(struct dir, name)+1)
 
 /* A note on the ino and dev fields above: ino is usually represented as ino_t,
  * which POSIX specifies to be an unsigned integer.  dev is usually represented
@@ -80,6 +80,15 @@ struct dir {
  * we encounter them, will just get typecasted into a positive value. No
  * information is lost in this conversion, and the semantics remain the same.
  */
+
+/* Extended information for a struct dir. This struct is stored in the same
+ * memory region as struct dir, placed after the name field. See util.h for
+ * macros to help manage this. */
+struct dir_ext {
+  uint64_t mtime;
+  int uid, gid;
+  unsigned short mode;
+};
 
 
 /* program state */
@@ -92,6 +101,8 @@ extern long update_delay;
 extern int cachedir_tags;
 /* flag if we should ask for confirmation when quitting */
 extern int confirm_quit;
+/* flag whether we want to enable use of struct dir_ext */
+extern int extended_info;
 
 /* handle input from keyboard and update display */
 int input_handle(int);

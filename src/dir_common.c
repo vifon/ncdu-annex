@@ -1,6 +1,6 @@
 /* ncdu - NCurses Disk Usage
 
-  Copyright (c) 2007-2016 Yoran Heling
+  Copyright (c) 2007-2018 Yoran Heling
 
   Permission is hereby granted, free of charge, to any person obtaining
   a copy of this software and associated documentation files (the
@@ -35,8 +35,8 @@ char *dir_curpath;   /* Full path of the last seen item. */
 struct dir_output dir_output;
 char *dir_fatalerr; /* Error message on a fatal error. (NULL if there was no fatal error) */
 int dir_ui;         /* User interface to use */
-int confirm_quit_while_scanning_stage_1_passed; /* Additional check before quitting */
-static char *lasterr; /* Path where the last error occured. */
+static int confirm_quit_while_scanning_stage_1_passed; /* Additional check before quitting */
+static char *lasterr; /* Path where the last error occurred. */
 static int curpathl; /* Allocated length of dir_curpath */
 static int lasterrl; /* ^ of lasterr */
 
@@ -106,20 +106,6 @@ void dir_seterr(const char *fmt, ...) {
 }
 
 
-struct dir *dir_createstruct(const char *name) {
-  static struct dir *d = NULL;
-  static size_t len = 0;
-  size_t req = SDIRSIZE+strlen(name);
-  if(len < req) {
-    len = req < SDIRSIZE+256 ? SDIRSIZE+256 : req < len*2 ? len*2 : req;
-    d = realloc(d, len);
-  }
-  memset(d, 0, SDIRSIZE);
-  strcpy(d->name, name);
-  return d;
-}
-
-
 static void draw_progress() {
   static const char scantext[] = "Scanning...";
   static const char loadtext[] = "Loading...";
@@ -131,14 +117,26 @@ static void draw_progress() {
 
   nccreate(10, width, antext);
 
-  ncprint(2, 2, "Total items: %-8d", dir_output.items);
-  if(dir_output.size)
-    ncprint(2, 23, "size: %s", formatsize(dir_output.size));
+  ncaddstr(2, 2, "Total items: ");
+  uic_set(UIC_NUM);
+  printw("%-8d", dir_output.items);
+
+  if(dir_output.size) {
+    ncaddstrc(UIC_DEFAULT, 2, 23, "size: ");
+    printsize(UIC_DEFAULT, dir_output.size);
+  }
+
+  uic_set(UIC_DEFAULT);
   ncprint(3, 2, "Current item: %s", cropstr(dir_curpath, width-18));
-  if (confirm_quit_while_scanning_stage_1_passed)
-    ncaddstr(8, width-26, "Press y to confirm abort");
-  else
-    ncaddstr(8, width-18, "Press q to abort");
+  if(confirm_quit_while_scanning_stage_1_passed) {
+    ncaddstr(8, width-26, "Press ");
+    addchc(UIC_KEY, 'y');
+    addstrc(UIC_DEFAULT, " to confirm abort");
+  } else {
+    ncaddstr(8, width-18, "Press ");
+    addchc(UIC_KEY, 'q');
+    addstrc(UIC_DEFAULT, " to abort");
+  }
 
   /* show warning if we couldn't open a dir */
   if(lasterr) {
@@ -181,6 +179,9 @@ static void draw_error(char *cur, char *msg) {
 
 
 void dir_draw() {
+  float f;
+  char *unit;
+
   switch(dir_ui) {
   case 0:
     if(dir_fatalerr)
@@ -189,10 +190,11 @@ void dir_draw() {
   case 1:
     if(dir_fatalerr)
       fprintf(stderr, "\r%s.\n", dir_fatalerr);
-    else if(dir_output.size)
-      fprintf(stderr, "\r%-55s %8d files /%s",
-        cropstr(dir_curpath, 55), dir_output.items, formatsize(dir_output.size));
-    else
+    else if(dir_output.size) {
+      f = formatsize(dir_output.size, &unit);
+      fprintf(stderr, "\r%-55s %8d files /%5.1f %s",
+        cropstr(dir_curpath, 55), dir_output.items, f, unit);
+    } else
       fprintf(stderr, "\r%-65s %8d files", cropstr(dir_curpath, 65), dir_output.items);
     break;
   case 2:

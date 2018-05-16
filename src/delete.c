@@ -1,6 +1,6 @@
 /* ncdu - NCurses Disk Usage
 
-  Copyright (c) 2007-2016 Yoran Heling
+  Copyright (c) 2007-2018 Yoran Heling
 
   Permission is hereby granted, free of charge, to any person obtaining
   a copy of this software and associated documentation files (the
@@ -39,7 +39,8 @@
 
 
 static struct dir *root, *nextsel, *curdir;
-static char noconfirm = 0, ignoreerr = 0, state, seloption;
+static char noconfirm = 0, ignoreerr = 0, state;
+static signed char seloption;
 static int lasterrno;
 
 
@@ -72,7 +73,9 @@ static void delete_draw_progress() {
   nccreate(6, 60, "Deleting...");
 
   ncaddstr(1, 2, cropstr(getpath(curdir), 47));
-  ncaddstr(4, 41, "Press q to abort");
+  ncaddstr(4, 41, "Press ");
+  addchc(UIC_KEY, 'q');
+  addstrc(UIC_DEFAULT, " to abort");
 }
 
 
@@ -194,7 +197,7 @@ static int delete_dir(struct dir *dr) {
     r = unlink(dr->name);
 
 delete_nxt:
-  /* error occured, ask user what to do */
+  /* error occurred, ask user what to do */
   if(r == -1 && !ignoreerr) {
     state = DS_FAILED;
     lasterrno = errno;

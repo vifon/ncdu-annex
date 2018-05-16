@@ -1,6 +1,6 @@
 /* ncdu - NCurses Disk Usage
 
-  Copyright (c) 2007-2016 Yoran Heling
+  Copyright (c) 2007-2018 Yoran Heling
 
   Permission is hereby granted, free of charge, to any person obtaining
   a copy of this software and associated documentation files (the
@@ -40,6 +40,7 @@ int pstate;
 int read_only = 0;
 long update_delay = 100;
 int cachedir_tags = 0;
+int extended_info = 0;
 
 static int min_rows = 17, min_cols = 60;
 static int ncurses_init = 0;
@@ -120,6 +121,7 @@ static void argv_parse(int argc, char **argv) {
     { 'q', 0, "-q" },
     { 'v', 0, "-v" },
     { 'x', 0, "-x" },
+    { 'e', 0, "-e" },
     { 'r', 0, "-r" },
     { 'o', 1, "-o" },
     { 'f', 1, "-f" },
@@ -131,6 +133,7 @@ static void argv_parse(int argc, char **argv) {
     { 'C', 0, "--exclude-caches" },
     { 's', 0, "--si" },
     { 'Q', 0, "--confirm-quit" },
+    { 'c', 1, "--color" },
     {0,0,NULL}
   };
 
@@ -147,6 +150,7 @@ static void argv_parse(int argc, char **argv) {
       printf("  -q                         Quiet mode, refresh interval 2 seconds\n");
       printf("  -v                         Print version\n");
       printf("  -x                         Same filesystem\n");
+      printf("  -e                         Enable extended information\n");
       printf("  -r                         Read only\n");
       printf("  -o FILE                    Export scanned directory to FILE\n");
       printf("  -f FILE                    Import scanned directory from FILE\n");
@@ -156,12 +160,14 @@ static void argv_parse(int argc, char **argv) {
       printf("  -X, --exclude-from FILE    Exclude files that match any pattern in FILE\n");
       printf("  --exclude-caches           Exclude directories containing CACHEDIR.TAG\n");
       printf("  --confirm-quit             Confirm quitting ncdu\n");
+      printf("  --color SCHEME             Set color scheme\n");
       exit(0);
     case 'q': update_delay = 2000; break;
     case 'v':
       printf("ncdu %s\n", PACKAGE_VERSION);
       exit(0);
     case 'x': dir_scan_smfs = 1; break;
+    case 'e': extended_info = 1; break;
     case 'r': read_only++; break;
     case 's': si = 1; break;
     case 'o': export = val; break;
@@ -179,6 +185,14 @@ static void argv_parse(int argc, char **argv) {
       break;
     case 'C':
       cachedir_tags = 1;
+      break;
+    case 'c':
+      if(strcmp(val, "off") == 0)  { uic_theme = 0; }
+      else if(strcmp(val, "dark") == 0) { uic_theme = 1; }
+      else {
+        fprintf(stderr, "Unknown --color option: %s\n", val);
+        exit(1);
+      }
       break;
     case -2:
       fprintf(stderr, "ncdu: %s.\n", val);
@@ -251,6 +265,7 @@ static void init_nc() {
     exit(1);
   }
 
+  uic_init();
   cbreak();
   noecho();
   curs_set(0);

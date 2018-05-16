@@ -1,6 +1,6 @@
 /* ncdu - NCurses Disk Usage
 
-  Copyright (c) 2007-2016 Yoran Heling
+  Copyright (c) 2007-2018 Yoran Heling
 
   Permission is hereby granted, free of charge, to any person obtaining
   a copy of this software and associated documentation files (the
@@ -74,9 +74,12 @@ static void output_int(uint64_t n) {
 }
 
 
-static void output_info(struct dir *d) {
+static void output_info(struct dir *d, const char *name, struct dir_ext *e) {
+  if(!extended_info || !(d->flags & FF_EXT))
+    e = NULL;
+
   fputs("{\"name\":\"", stream);
-  output_string(d->name);
+  output_string(name);
   fputc('"', stream);
 
   /* No need for asize/dsize if they're 0 (which happens with excluded or failed-to-stat files) */
@@ -95,6 +98,17 @@ static void output_info(struct dir *d) {
   }
   fputs(",\"ino\":", stream);
   output_int(d->ino);
+
+  if(e) {
+    fputs(",\"uid\":", stream);
+    output_int(e->uid);
+    fputs(",\"gid\":", stream);
+    output_int(e->gid);
+    fputs(",\"mode\":", stream);
+    output_int(e->mode);
+    fputs(",\"mtime\":", stream);
+    output_int(e->mtime);
+  }
 
   /* TODO: Including the actual number of links would be nicer. */
   if(d->flags & FF_HLNKC)
@@ -118,7 +132,7 @@ static void output_info(struct dir *d) {
  * item() call do we check for ferror(). This greatly simplifies the code, but
  * assumes that calls to fwrite()/fput./etc don't do any weird stuff when
  * called with a stream that's in an error state. */
-static int item(struct dir *item) {
+static int item(struct dir *item, const char *name, struct dir_ext *ext) {
   if(!item) {
     nstack_pop(&stack);
     if(!stack.top) { /* closing of the root item */
@@ -134,7 +148,7 @@ static int item(struct dir *item) {
   /* File header.
    * TODO: Add scan options? */
   if(!stack.top) {
-    fputs("[1,0,{\"progname\":\""PACKAGE"\",\"progver\":\""PACKAGE_VERSION"\",\"timestamp\":", stream);
+    fputs("[1,1,{\"progname\":\""PACKAGE"\",\"progver\":\""PACKAGE_VERSION"\",\"timestamp\":", stream);
     output_int((uint64_t)time(NULL));
     fputc('}', stream);
   }
@@ -143,7 +157,7 @@ static int item(struct dir *item) {
   if(item->flags & FF_DIR)
     fputc('[', stream);
 
-  output_info(item);
+  output_info(item, name, ext);
 
   if(item->flags & FF_DIR)
     nstack_push(&stack, item->dev);

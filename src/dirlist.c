@@ -1,6 +1,6 @@
 /* ncdu - NCurses Disk Usage
 
-  Copyright (c) 2007-2016 Yoran Heling
+  Copyright (c) 2007-2018 Yoran Heling
 
   Permission is hereby granted, free of charge, to any person obtaining
   a copy of this software and associated documentation files (the
@@ -26,6 +26,7 @@
 #include "global.h"
 
 #include <string.h>
+#include <stdlib.h>
 
 
 /* public variables */
@@ -207,7 +208,7 @@ void dirlist_open(struct dir *d) {
   /* set the reference to the parent dir */
   if(d->parent) {
     if(!parent_alloc)
-      parent_alloc = calloc(1, SDIRSIZE + 3);
+      parent_alloc = calloc(1, dir_memsize(".."));
     dirlist_parent = parent_alloc;
     strcpy(dirlist_parent->name, "..");
     dirlist_parent->next = head;
@@ -305,7 +306,7 @@ void dirlist_select(struct dir *d) {
  *  1 = selected has moved down
  * -1 = selected has moved up
  * -2 = selected = first item in the list (faster version of '1')
- * -3 = top should be considered as invalid (after sorting or opening an other dir)
+ * -3 = top should be considered as invalid (after sorting or opening another dir)
  * -4 = an item has been deleted
  * -5 = hidden flag has been changed
  *

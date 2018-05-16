@@ -1,6 +1,6 @@
 /* ncdu - NCurses Disk Usage
 
-  Copyright (c) 2007-2016 Yoran Heling
+  Copyright (c) 2007-2018 Yoran Heling
 
   Permission is hereby granted, free of charge, to any person obtaining
   a copy of this software and associated documentation files (the
@@ -54,12 +54,6 @@
  * improves performance. */
 #define READ_BUF_SIZE (32*1024)
 
-/* Maximum nesting level for JSON objects / arrays.  (Well, approximately. In
- * some cases an object/array can be nested inside an other object/array while
- * only counting as a single level rather than two.  Anyway, the point of this
- * limit is to prevent stack overflow, which it should do.) */
-#define MAX_LEVEL 100
-
 
 int dir_import_active = 0;
 
@@ -72,10 +66,14 @@ struct ctx {
   int byte;
   int eof;
   int items;
-  int level;
   char *buf; /* points into readbuf, always zero-terminated. */
   char *lastfill; /* points into readbuf, location of the zero terminator. */
 
+  /* scratch space */
+  struct dir    *buf_dir;
+  struct dir_ext buf_ext[1];
+
+  char buf_name[MAX_VAL];
   char val[MAX_VAL];
   char readbuf[READ_BUF_SIZE];
 } *ctx;
@@ -83,7 +81,7 @@ struct ctx {
 
 /* Fills readbuf with data from the stream. *buf will have at least n (<
  * READ_BUF_SIZE) bytes available, unless the stream reached EOF or an error
- * occured. If the file data contains a null-type, this is considered an error.
+ * occurred. If the file data contains a null-type, this is considered an error.
  * Returns 0 on success, non-zero on error. */
 static int fill(int n) {
   int r;
@@ -327,9 +325,6 @@ static int rkey(char *dest, int destlen) {
 
 /* (Recursively) parse and consume any JSON value. The result is discarded. */
 static int rval() {
-  ctx->level++;
-  E(ctx->level > MAX_LEVEL, "Recursion depth exceeded");
-
   C(rfill1);
   switch(*ctx->buf) {
   case 't': /* true */
@@ -377,7 +372,6 @@ static int rval() {
     break;
   }
 
-  ctx->level--;
   return 0;
 }
 
@@ -412,9 +406,6 @@ static int item(uint64_t);
 
 /* Read and add dir contents */
 static int itemdir(uint64_t dev) {
-  ctx->level++;
-  E(ctx->level > MAX_LEVEL, "Recursion depth exceeded");
-
   while(1) {
     C(cons());
     if(*ctx->buf == ']')
@@ -425,22 +416,14 @@ static int itemdir(uint64_t dev) {
   }
   con(1);
   C(cons());
-  ctx->level--;
   return 0;
 }
 
 
-static int iteminfo(struct dir **item, uint64_t dev, int isdir) {
-  static struct dir *dirbuf;
-  struct dir *tmp, *d;
+/* Reads a JSON object representing a struct dir/dir_ext item. Writes to
+ * ctx->buf_dir, ctx->buf_ext and ctx->buf_name. */
+static int iteminfo() {
   uint64_t iv;
-
-  if(!dirbuf)
-    dirbuf = malloc(sizeof(struct dir));
-  d = dirbuf;
-  memset(d, 0, sizeof(struct dir));
-  d->flags |= isdir ? FF_DIR : FF_FILE;
-  d->dev = dev;
 
   E(*ctx->buf != '{', "Expected JSON object");
   con(1);
@@ -452,47 +435,62 @@ static int iteminfo(struct dir **item, uint64_t dev, int isdir) {
       ctx->val[MAX_VAL-1] = 1;
       C(rstring(ctx->val, MAX_VAL));
       E(ctx->val[MAX_VAL-1] != 1, "Too large string value");
-      tmp = dir_createstruct(ctx->val);
-      memcpy(tmp, d, SDIRSIZE-1);
-      d = tmp;
+      strcpy(ctx->buf_name, ctx->val);
     } else if(strcmp(ctx->val, "asize") == 0) {      /* asize */
       C(rint64(&iv, INT64_MAX));
-      d->asize = iv;
+      ctx->buf_dir->asize = iv;
     } else if(strcmp(ctx->val, "dsize") == 0) {      /* dsize */
       C(rint64(&iv, INT64_MAX));
-      d->size = iv;
+      ctx->buf_dir->size = iv;
     } else if(strcmp(ctx->val, "dev") == 0) {        /* dev */
       C(rint64(&iv, UINT64_MAX));
-      d->dev = iv;
+      ctx->buf_dir->dev = iv;
     } else if(strcmp(ctx->val, "ino") == 0) {        /* ino */
       C(rint64(&iv, UINT64_MAX));
-      d->ino = iv;
+      ctx->buf_dir->ino = iv;
+    } else if(strcmp(ctx->val, "uid") == 0) {        /* uid */
+      C(rint64(&iv, INT32_MAX));
+      ctx->buf_dir->flags |= FF_EXT;
+      ctx->buf_ext->uid = iv;
+    } else if(strcmp(ctx->val, "gid") == 0) {        /* gid */
+      C(rint64(&iv, INT32_MAX));
+      ctx->buf_dir->flags |= FF_EXT;
+      ctx->buf_ext->gid = iv;
+    } else if(strcmp(ctx->val, "mode") == 0) {       /* mode */
+      C(rint64(&iv, UINT16_MAX));
+      ctx->buf_dir->flags |= FF_EXT;
+      ctx->buf_ext->mode = iv;
+    } else if(strcmp(ctx->val, "mtime") == 0) {      /* mtime */
+      C(rint64(&iv, UINT64_MAX));
+      ctx->buf_dir->flags |= FF_EXT;
+      ctx->buf_ext->mtime = iv;
     } else if(strcmp(ctx->val, "hlnkc") == 0) {      /* hlnkc */
       if(*ctx->buf == 't') {
         C(rlit("true", 4));
-        d->flags |= FF_HLNKC;
+        ctx->buf_dir->flags |= FF_HLNKC;
       } else
         C(rlit("false", 5));
     } else if(strcmp(ctx->val, "read_error") == 0) { /* read_error */
       if(*ctx->buf == 't') {
         C(rlit("true", 4));
-        d->flags |= FF_ERR;
+        ctx->buf_dir->flags |= FF_ERR;
       } else
         C(rlit("false", 5));
     } else if(strcmp(ctx->val, "excluded") == 0) {   /* excluded */
       C(rstring(ctx->val, 8));
       if(strcmp(ctx->val, "otherfs") == 0)
-        d->flags |= FF_OTHFS;
+        ctx->buf_dir->flags |= FF_OTHFS;
       else
-        d->flags |= FF_EXL;
+        ctx->buf_dir->flags |= FF_EXL;
     } else if(strcmp(ctx->val, "notreg") == 0) {     /* notreg */
       if(*ctx->buf == 't') {
         C(rlit("true", 4));
-        d->flags &= ~FF_FILE;
+        ctx->buf_dir->flags &= ~FF_FILE;
       } else
         C(rlit("false", 5));
     } else
       C(rval());
+    /* TODO: Extended attributes */
 
     C(cons());
     if(*ctx->buf == '}')
@@ -502,8 +500,7 @@ static int iteminfo(struct dir **item, uint64_t dev, int isdir) {
   }
   con(1);
 
-  E(!*d->name, "No name field present in item information object");
-  *item = d;
+  E(!*ctx->buf_name, "No name field present in item information object");
   ctx->items++;
   /* Only call input_handle() once for every 32 items. Importing items is so
    * fast that the time spent in input_handle() dominates when called every
@@ -517,7 +514,6 @@ static int iteminfo(struct dir **item, uint64_t dev, int isdir) {
 static int item(uint64_t dev) {
   int isdir = 0;
   int isroot = ctx->items == 0;
-  struct dir *d = NULL;
 
   if(*ctx->buf == '[') {
     isdir = 1;
@@ -525,25 +521,31 @@ static int item(uint64_t dev) {
     C(cons());
   }
 
-  C(iteminfo(&d, dev, isdir));
-  dev = d->dev;
+  memset(ctx->buf_dir, 0, offsetof(struct dir, name));
+  memset(ctx->buf_ext, 0, sizeof(struct dir_ext));
+  *ctx->buf_name = 0;
+  ctx->buf_dir->flags |= isdir ? FF_DIR : FF_FILE;
+  ctx->buf_dir->dev = dev;
+
+  C(iteminfo());
+  dev = ctx->buf_dir->dev;
 
   if(isroot)
-    dir_curpath_set(d->name);
+    dir_curpath_set(ctx->buf_name);
   else
-    dir_curpath_enter(d->name);
+    dir_curpath_enter(ctx->buf_name);
 
   if(isdir) {
-    if(dir_output.item(d)) {
+    if(dir_output.item(ctx->buf_dir, ctx->buf_name, ctx->buf_ext)) {
       dir_seterr("Output error: %s", strerror(errno));
       return 1;
     }
     C(itemdir(dev));
-    if(dir_output.item(NULL)) {
+    if(dir_output.item(NULL, 0, NULL)) {
       dir_seterr("Output error: %s", strerror(errno));
       return 1;
     }
-  } else if(dir_output.item(d)) {
+  } else if(dir_output.item(ctx->buf_dir, ctx->buf_name, ctx->buf_ext)) {
     dir_seterr("Output error: %s", strerror(errno));
     return 1;
   }
@@ -578,6 +580,7 @@ static int process() {
 
   if(fclose(ctx->stream) && !dir_fatalerr && !fail)
     dir_seterr("Error closing file: %s", strerror(errno));
+  free(ctx->buf_dir);
   free(ctx);
 
   while(dir_fatalerr && !input_handle(0))
@@ -596,8 +599,9 @@ int dir_import_init(const char *fn) {
   ctx = malloc(sizeof(struct ctx));
   ctx->stream = stream;
   ctx->line = 1;
-  ctx->byte = ctx->eof = ctx->items = ctx->level = 0;
+  ctx->byte = ctx->eof = ctx->items = 0;
   ctx->buf = ctx->lastfill = ctx->readbuf;
+  ctx->buf_dir = malloc(dir_memsize(""));
   ctx->readbuf[0] = 0;
 
   dir_curpath_set(fn);
